@@ -22,6 +22,7 @@ import threading
 from queue import Queue
 import argparse
 import json
+import pretty_midi
 
 from output_handlers.cli_output import CLIOutputHandler
 from output_handlers.audio_output import AudioOutputHandler
@@ -207,6 +208,122 @@ def save_prompt_midi(
 
     except Exception as e:
         print(f"✗ 保存 prompt MIDI 文件失败: {e}")
+
+
+def save_groundtruth_music(
+    melody_file_path: str,
+    injection_length_ticks: int,
+    base_log_dir: str,
+    tempo: float = 120.0,
+    ticks_per_beat: int = 4,
+    generation_length_ticks: int = None,
+):
+    """
+    保存生成部分的 groundtruth music（melody 和 accompaniment 分离的轨道）
+    melody_file_path: 旋律文件路径
+    injection_length_ticks: 要去掉的前 N 个 ticks（客户端 tick 单位）
+    base_log_dir: 存储日志的基础目录，groundtruth 文件将保存在 base_log_dir/gt_generation/ 下
+    tempo: 节奏 (BPM)
+    ticks_per_beat: 每拍的 ticks 数
+    generation_length_ticks: 生成的总长度（客户端 tick 单位），如果指定了这个参数，groundtruth 将只保留从 injection_length_ticks 开始的 generation_length_ticks 长度
+    """
+    try:
+        # 确定 mel 和 acc 文件路径
+        mel_file_path = melody_file_path
+        acc_file_path = melody_file_path.replace("/mel/", "/acc/")
+
+        # 创建 gt_generation 目录
+        gt_dir = os.path.join(base_log_dir, "gt_generation")
+        os.makedirs(gt_dir, exist_ok=True)
+
+        # 获取基础文件名
+        base_name = os.path.basename(mel_file_path)
+        gt_file_path = os.path.join(gt_dir, base_name)
+
+        print(f"处理 Melody 文件: {mel_file_path}")
+        print(f"处理 Accompaniment 文件: {acc_file_path}")
+
+        # 创建合并的 MIDI 文件
+        gt_midi = mido.MidiFile()
+
+        # 使用 mel 文件的 ticks_per_beat 作为基准
+        mel_midi = mido.MidiFile(mel_file_path)
+        gt_midi.ticks_per_beat = mel_midi.ticks_per_beat
+
+        # 转换客户端 ticks 到 MIDI ticks
+        midi_ticks_per_client_tick = gt_midi.ticks_per_beat / ticks_per_beat
+        start_tick = int(injection_length_ticks * midi_ticks_per_client_tick)
+        if generation_length_ticks is not None:
+            end_tick = start_tick + int(
+                generation_length_ticks * midi_ticks_per_client_tick
+            )
+        else:
+            end_tick = None  # 保留到结尾
+
+        print(f"截取范围: MIDI ticks {start_tick} 到 {end_tick}")
+
+        # 处理文件列表
+        files_to_process = [("melody", mel_file_path), ("accompaniment", acc_file_path)]
+
+        # 处理每个文件（mel 和 acc）
+        for file_type, file_path in files_to_process:
+            print(f"处理 {file_type} 文件: {file_path}")
+
+            try:
+                if not os.path.exists(file_path):
+                    print(f"警告: {file_type} 文件不存在: {file_path}")
+                    continue
+
+                original_midi = mido.MidiFile(file_path)
+
+                # 处理每个轨道
+                for track_idx, track in enumerate(original_midi.tracks):
+                    new_track = mido.MidiTrack()
+                    # 设置轨道名称
+                    # 映射轨道名称：melody -> guitar, accompaniment -> piano
+                    if file_type == "melody":
+                        track_name = "guitar"
+                    else:  # file_type == "accompaniment"
+                        track_name = "piano"
+
+                    new_track.append(
+                        mido.MetaMessage("track_name", name=track_name, time=0)
+                    )
+
+                    abs_time = 0
+                    last_abs_time = start_tick  # 记录上一个保留消息的绝对时间
+
+                    for msg in track:
+                        abs_time += msg.time
+                        # 只保留在指定区间的消息
+                        if abs_time < start_tick:
+                            continue
+                        if end_tick is not None and abs_time >= end_tick:
+                            break
+                        # 调整消息时间为相对区间起点
+                        delta_time = abs_time - last_abs_time
+                        msg_copy = msg.copy(time=delta_time)
+                        new_track.append(msg_copy)
+                        last_abs_time = abs_time
+
+                    # 确保轨道以 end_of_track 结束
+                    if new_track and new_track[-1].type != "end_of_track":
+                        new_track.append(mido.MetaMessage("end_of_track", time=0))
+
+                    if new_track:
+                        gt_midi.tracks.append(new_track)
+
+            except Exception as e:
+                print(f"处理 {file_type} 文件时出错: {e}")
+                continue
+
+        # 保存 groundtruth MIDI 文件
+        gt_midi.save(gt_file_path)
+        print(f"✓ Groundtruth music 已保存到: {gt_file_path}")
+        print(f"  包含 {len(gt_midi.tracks)} 个轨道")
+
+    except Exception as e:
+        print(f"✗ 保存 groundtruth music 失败: {e}")
 
 
 # 添加注入功能函数
@@ -769,6 +886,7 @@ def main():
 
     # --- 处理音乐注入 ---
     injection_offset_ticks = 0
+    gt_accompaniment_file_path = None  # For saving groundtruth later
     if args.injection_file:
         injection_offset_ticks = inject_music_to_server(
             args.server_url, args.injection_file, args.injection_length
@@ -785,6 +903,9 @@ def main():
                 session_log_dir,
                 args.ticks_per_beat,
             )
+
+            # 保存伴奏文件路径，稍后在退出时保存 groundtruth
+            gt_accompaniment_file_path = args.injection_file.replace("/mel/", "/acc/")
 
     event_queue = Queue()
     inference_request_queue = Queue()
@@ -907,6 +1028,20 @@ def main():
                 )
             except Exception as e:
                 print(f"✗ 保存 tick_history 失败: {e}")
+
+            # 保存完整的 groundtruth music（melody 和 accompaniment 分离的轨道）
+            if gt_accompaniment_file_path:
+                gt_base_dir = os.path.join("app", "logs")
+                os.makedirs(gt_base_dir, exist_ok=True)
+                save_groundtruth_music(
+                    args.injection_file,
+                    args.injection_length,
+                    gt_base_dir,
+                    args.tempo,
+                    args.ticks_per_beat,
+                    generation_length_ticks=generation_length_ticks,
+                )
+
             audio_output_handler.close()
         else:
             print(
@@ -915,7 +1050,7 @@ def main():
             test_midi_file_name = os.path.splitext(
                 os.path.basename(args.midi_file_input)
             )[0]
-            base_log_dir = f"experiments-AE0/realtime/baseline/interval_{args.generation_interval_ticks}_gen_frame_{args.generation_length_per_request}/prompt_{args.injection_length}_gen_{args.generation_length}"
+            base_log_dir = f"experiments-AE4/realtime/baseline/interval_{args.generation_interval_ticks}_gen_frame_{args.generation_length_per_request}/prompt_{args.injection_length}_gen_{args.generation_length}"
             session_log_dir = os.path.join(
                 base_log_dir, "batch_run", test_midi_file_name
             )
@@ -927,6 +1062,18 @@ def main():
                 experiment_dir, midi_file_name=test_midi_file_name
             )
             json_log_handler.save_logs(session_log_dir)
+
+            # 保存完整的 groundtruth music（melody 和 accompaniment 分离的轨道）
+            if gt_accompaniment_file_path:
+                save_groundtruth_music(
+                    args.injection_file,
+                    args.injection_length,
+                    base_log_dir,
+                    args.tempo,
+                    args.ticks_per_beat,
+                    generation_length_ticks=generation_length_ticks,
+                )
+
             audio_output_handler.close()
             try:
                 with open(
