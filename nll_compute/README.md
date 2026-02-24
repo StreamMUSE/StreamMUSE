@@ -37,17 +37,25 @@ Calculate chunked NLLs for a folder of generated `.mid` files and save raw tenso
 *(推导出一个目录下所有 MIDI 文件每片段的 NLL 数据，生成原始 JSON 记录文件。)*
 
 ```bash
+# For a single combination, e.g. interval=2, gen_frame=5:
+EXP_ROOT="experiments-AE5"                   # must match --out-root prefix in real_time_experiment_runner
+EVAL_RESULTS="${EXP_ROOT}"
+
 uv run python -m nll_compute.runners.run_cal_nll \
-  --midi_dir /path/to/midi/dir \
+  --midi_dir ${EXP_ROOT}/realtime/baseline/interval_2_gen_frame_5/prompt_128_gen_576/generated \
   --ckpt_path /path/to/model.ckpt \
-  --save_json_path /path/to/eval/results-<experiment>/nll_runs/experiments_interval2_gen5.json \
+  --save_json_path ${EVAL_RESULTS}/nll_runs/experiments_interval2_gen5.json \
   --window 384 --offset 128
 ```
 
-> **⚠️ Output path convention (with `eval` repo)**  
-> `add_nll_to_summary.py` in the `eval` repo auto-discovers NLL files by scanning `results-<experiment>/nll_runs/experiments*.json`.  
-> - The file **must be placed inside a `nll_runs/` folder** under your eval results directory.  
-> - The filename **must start with `experiments`** (e.g. `experiments_interval2_gen5.json`).  
-> - The `interval` and `gen_frame` numbers are parsed from the filename to match the CSV rows automatically.
+> **Path alignment with `real_time_experiment_runner.py`:**  
+> - `--midi_dir` → `<out-root-prefix>/realtime/baseline/interval_X_gen_frame_Y/.../generated/`  
+>   (the `generated/` subfolder is auto-created by the runner alongside `batch_run/`)  
+> - `--save_json_path` → `<eval-results>/nll_runs/experiments_intervalX_genY.json`  
+>   Filename **must** start with `experiments` and embed `interval` + `gen_frame` numbers  
+>   so `add_nll_to_summary.py` in `eval` can match it to the correct CSV row automatically.
+
+> ⚡ **Tip:** For multiple combinations, use the companion `run_nll.sh` (see below) instead of repeating this command.
+
 
 *(Note: Use `run_nll_from_manifest.py` for testing large grids of combinations.)*
