@@ -37,20 +37,17 @@ Calculate chunked NLLs for a folder of generated `.mid` files and save raw tenso
 *(推导出一个目录下所有 MIDI 文件每片段的 NLL 数据，生成原始 JSON 记录文件。)*
 
 ```bash
-python -m nll_compute.runners.run_cal_nll \
+uv run python -m nll_compute.runners.run_cal_nll \
   --midi_dir /path/to/midi/dir \
   --ckpt_path /path/to/model.ckpt \
-  --save_json_path output/results.json \
+  --save_json_path /path/to/eval/results-<experiment>/nll_runs/experiments_interval2_gen5.json \
   --window 384 --offset 128
 ```
-or 
 
-```bash
-uv run -m nll_compute.runners.run_cal_nll \
-  --midi_dir /path/to/midi/dir \
-  --ckpt_path /path/to/model.ckpt \
-  --save_json_path output/results.json \
-  --window 384 --offset 128
-```
+> **⚠️ Output path convention (with `eval` repo)**  
+> `add_nll_to_summary.py` in the `eval` repo auto-discovers NLL files by scanning `results-<experiment>/nll_runs/experiments*.json`.  
+> - The file **must be placed inside a `nll_runs/` folder** under your eval results directory.  
+> - The filename **must start with `experiments`** (e.g. `experiments_interval2_gen5.json`).  
+> - The `interval` and `gen_frame` numbers are parsed from the filename to match the CSV rows automatically.
 
 *(Note: Use `run_nll_from_manifest.py` for testing large grids of combinations.)*
