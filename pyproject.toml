@@ -49,3 +49,10 @@ transformers = { path = "transformers", editable = true }
 name = "pytorch-cu126"
 url = "https://download.pytorch.org/whl/cu126"
 explicit = true
+
+[tool.pyright]
+exclude = [
+    ".venv",
+    ".git",
+    "transformers",
+]
