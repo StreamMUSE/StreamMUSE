@@ -135,3 +135,11 @@ Run inferencen with:
 + `--temperature` let you define the temperature.
 
 The result will be saved in `\temp.`
+
+## Evaluation (NLL Compute)
+
+If you wish to calculate the Negative Log-Likelihood (NLL) of the generated outputs against your models, please check the dedicated toolkit inside `nll_compute/`. 
+
+See [`nll_compute/README.md`](nll_compute/README.md) for detailed instructions on:
+1. Running raw batch metrics using `run_cal_nll`.
+2. Extracting the generated JSON to the decoupled **`eval`** repository for statistical aggregation and heatmap plotting.

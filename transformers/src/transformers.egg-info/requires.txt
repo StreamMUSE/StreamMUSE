@@ -29,11 +29,6 @@ tensorflow-text<2.16
 keras-nlp<0.14.0,>=0.3.1
 torch>=2.0
 accelerate>=0.26.0
-jax<=0.4.13,>=0.4.1
-jaxlib<=0.4.13,>=0.4.1
-flax<=0.7.0,>=0.4.1
-optax<=0.1.4,>=0.0.8
-scipy<1.13.0
 sentencepiece!=0.1.92,>=0.1.91
 protobuf
 tokenizers<0.22,>=0.21
@@ -92,7 +87,6 @@ beautifulsoup4
 tensorboard
 pydantic
 sentencepiece!=0.1.92,>=0.1.91
-faiss-cpu
 cookiecutter==1.7.3
 optuna
 protobuf
@@ -105,11 +99,6 @@ tensorflow-text<2.16
 keras-nlp<0.14.0,>=0.3.1
 torch>=2.0
 accelerate>=0.26.0
-jax<=0.4.13,>=0.4.1
-jaxlib<=0.4.13,>=0.4.1
-flax<=0.7.0,>=0.4.1
-optax<=0.1.4,>=0.0.8
-scipy<1.13.0
 sentencepiece!=0.1.92,>=0.1.91
 protobuf
 tokenizers<0.22,>=0.21
@@ -147,7 +136,6 @@ rjieba
 beautifulsoup4
 tensorboard
 pydantic
-faiss-cpu
 cookiecutter==1.7.3
 isort>=5.5.4
 urllib3<2.0.0
@@ -185,7 +173,6 @@ beautifulsoup4
 tensorboard
 pydantic
 sentencepiece!=0.1.92,>=0.1.91
-faiss-cpu
 cookiecutter==1.7.3
 tensorflow<2.16,>2.9
 onnxconverter-common
@@ -230,7 +217,6 @@ beautifulsoup4
 tensorboard
 pydantic
 sentencepiece!=0.1.92,>=0.1.91
-faiss-cpu
 cookiecutter==1.7.3
 torch>=2.0
 accelerate>=0.26.0
@@ -264,11 +250,6 @@ onnxruntime>=1.4.0
 onnxruntime-tools>=1.4.2
 
 [flax]
-jax<=0.4.13,>=0.4.1
-jaxlib<=0.4.13,>=0.4.1
-flax<=0.7.0,>=0.4.1
-optax<=0.1.4,>=0.0.8
-scipy<1.13.0
 
 [flax-speech]
 librosa
@@ -325,7 +306,6 @@ rich
 ray[tune]>=2.7.0
 
 [retrieval]
-faiss-cpu
 datasets!=2.5.0
 
 [ruff]
@@ -380,7 +360,6 @@ beautifulsoup4
 tensorboard
 pydantic
 sentencepiece!=0.1.92,>=0.1.91
-faiss-cpu
 cookiecutter==1.7.3
 
 [tf]
