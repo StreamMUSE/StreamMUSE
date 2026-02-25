@@ -39,14 +39,19 @@ Calculate chunked NLLs for a folder of generated `.mid` files and save raw tenso
 ```bash
 # For a single combination, e.g. interval=2, gen_frame=5:
 EXP_ROOT="experiments-AE5"                   # must match --out-root prefix in real_time_experiment_runner
-EVAL_RESULTS="${EXP_ROOT}"
+EVAL_RESULTS="/path/to/eval/results-${EXP_ROOT}"
 
 uv run python -m nll_compute.runners.run_cal_nll \
   --midi_dir ${EXP_ROOT}/realtime/baseline/interval_2_gen_frame_5/prompt_128_gen_576/generated \
   --ckpt_path /path/to/model.ckpt \
   --save_json_path ${EVAL_RESULTS}/nll_runs/experiments_interval2_gen5.json \
-  --window 384 --offset 128
+  --window 256 --offset 64
 ```
+
+> **⚠️ `--window` is in MIDI ticks, not model frames.**  
+> `--generation-length 576` (model frames) → MIDI output ≈ **288 ticks** (1 tick = 2 model frames).  
+> Therefore `--window` must be **less than ~288**. `256` is a safe default that guarantees at least one complete sliding-window pass.
+
 
 > **Path alignment with `real_time_experiment_runner.py`:**  
 > - `--midi_dir` → `<out-root-prefix>/realtime/baseline/interval_X_gen_frame_Y/.../generated/`  

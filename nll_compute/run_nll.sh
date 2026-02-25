@@ -18,8 +18,11 @@ EXP_ROOT="experiments-AE5"                         # must match --out-root prefi
 CKPT_PATH="/path/to/model.ckpt"                    # model checkpoint
 PROMPT_GEN="prompt_128_gen_576"                    # must match injection/generation lengths used
 EVAL_NLL_DIR="/path/to/eval/results-${EXP_ROOT}/nll_runs"  # destination in eval repo
-WINDOW=384
-OFFSET=128
+# ⚠️ UNIT NOTE: core.py measures MIDI file length in MIDI ticks, not model frames.
+# --generation-length 576 (model frames) produces ~288 MIDI ticks (1 tick = 2 frames).
+# So --window must be < ~288. Use 256 to guarantee at least one sliding window pass.
+WINDOW=256
+OFFSET=64
 # ──────────────────────────────────────────────────────────────────────────────
 
 mkdir -p "${EVAL_NLL_DIR}"
