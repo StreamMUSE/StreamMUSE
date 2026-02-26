@@ -10,7 +10,7 @@ server:
   url: "http://0.0.0.0:8988/generate_accompaniment"
 
 benchmark:
-  num_requests: 50  # Moderate number for testing injection
+  num_requests: 1000  # Moderate number for testing injection
   tempo: 120.0
 
 # Test different prompt lengths with injection
