@@ -67,6 +67,7 @@ class InferenceEngineStanley:
         model_size: str,
         max_polyphony=4,
         model_max_seq_len_frames=384,
+        generation_length_frames=20,
     ):
         # Check if the checkpoint file exists
         if not os.path.exists(checkpoint_path):
@@ -80,6 +81,7 @@ class InferenceEngineStanley:
             map_location=lambda storage, loc: storage.cuda(0)
             if torch.cuda.is_available()
             else "cpu",
+            weights_only=False,  # required for checkpoints saved with PyTorch < 2.0
         )
 
         # Move model to GPU if available
@@ -99,6 +101,9 @@ class InferenceEngineStanley:
 
         # The maximum number of simultaneous notes allowed at a single tick.
         self.max_polyphony = max_polyphony
+
+        # Default number of frames to generate per request when client omits it.
+        self.generation_length_frames = generation_length_frames
 
         # Stateful history of all notes played during the session.
         # These are stored with absolute ticks relative to the start of the performance.
@@ -289,6 +294,7 @@ class InferenceEngineStanley:
         generation_start_tick,
         acc_notes=None,
         generation_length_frames=None,
+        prompt_length_ticks=None,
     ):
         """
         生成伴奏
@@ -321,8 +327,11 @@ class InferenceEngineStanley:
             self.accompaniment_history.extend(absolute_acc_notes)
 
         # Get the length of our actually prompt
+        effective_prompt_length_ticks = (
+            prompt_length_ticks if prompt_length_ticks is not None else self.prompt_length_ticks
+        )
         prompt_end_tick = absolute_generation_start_tick
-        prompt_start_tick = max(0, prompt_end_tick - self.prompt_length_ticks)
+        prompt_start_tick = max(0, prompt_end_tick - effective_prompt_length_ticks)
         actual_prompt_length_ticks = prompt_end_tick - prompt_start_tick
         if actual_prompt_length_ticks <= 0:  # check if prompt length is valid
             raise ValueError("Prompt length must be greater than zero.")
@@ -404,12 +413,17 @@ class InferenceEngineStanley:
         # with open("tensor_dump.txt", "w") as f:
         #     f.write(str(x.cpu().numpy()))
 
+        effective_len = (
+            generation_length_frames
+            if generation_length_frames is not None
+            else self.generation_length_frames
+        )
         with torch.no_grad():
             output_tensors = self.model.global_sampling(
                 x,
                 x_mel_gt=None,
                 temperature=1,
-                max_seq_len=generation_length_frames,
+                max_seq_len=effective_len,
             )
 
         inference_end_time = time.perf_counter()

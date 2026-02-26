@@ -3,6 +3,7 @@ This is the server side for the StreamMUSE end to end system.
 """
 
 import os
+from typing import Optional
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -24,7 +25,11 @@ class InferenceRequest(BaseModel):
     melody_notes: list[MelodyNoteEvent]
     generation_start_tick: int
     client_request_send_time: float
-    generation_length_frames: int = None
+    generation_length_frames: Optional[int] = None
+    prompt_length_ticks: Optional[int] = None
+    inference_interval_ticks: Optional[int] = None
+    tempo: Optional[float] = None
+    assumed_network_latency_ms: Optional[float] = None
 
 
 class AccompanimentNoteEvent(BaseModel):
@@ -63,6 +68,57 @@ class InjectionResponse(BaseModel):
     accompaniment_notes_injected: int
 
 
+# Global state for accumulated latency tracking (used by timing analysis)
+accumulated_latency_ms = 0.0
+
+
+def calculate_musical_timing_analysis(
+    inference_duration_ms: float,
+    generation_length_frames: int,
+    inference_interval_ticks: Optional[int] = None,
+    tempo: Optional[float] = None,
+    assumed_network_latency_ms: Optional[float] = None,
+):
+    """
+    Calculate compact timing analysis for real-time requests.
+    """
+    global accumulated_latency_ms
+
+    has_full_params = all([
+        inference_interval_ticks is not None,
+        tempo is not None,
+        assumed_network_latency_ms is not None,
+    ])
+
+    if not has_full_params:
+        missing = []
+        if inference_interval_ticks is None:
+            missing.append("inference_interval_ticks")
+        if tempo is None:
+            missing.append("tempo")
+        if assumed_network_latency_ms is None:
+            missing.append("assumed_network_latency_ms")
+        return (
+            f"TIMING: Inference={inference_duration_ms:.1f}ms, "
+            f"Gen={generation_length_frames}f | "
+            f"Missing for full analysis: {', '.join(missing)}"
+        )
+
+    tick_duration_ms = (60000 / tempo) / 4
+    target_musical_time = tick_duration_ms * inference_interval_ticks
+    total_latency = inference_duration_ms + assumed_network_latency_ms
+    difference = total_latency - target_musical_time
+    accumulated_latency_ms = max(0, accumulated_latency_ms + difference)
+    status = "EARLY" if difference < 0 else "LATE" if difference > 0 else "EXACT"
+    return (
+        f"TIMING: Inf={inference_duration_ms:.1f}ms + Net={assumed_network_latency_ms:.1f}ms = "
+        f"{total_latency:.1f}ms vs Target={target_musical_time:.1f}ms "
+        f"({difference:+.1f}ms {status}) | "
+        f"Accumulated={accumulated_latency_ms:.1f}ms | "
+        f"Interval={inference_interval_ticks}ticks @ {tempo:.0f}BPM"
+    )
+
+
 # app = FastAPI(title='StreamMUSE Inference Server')
 
 
@@ -82,6 +138,9 @@ async def lifespan(app: FastAPI):
     # Get model parameters from environment variables with defaults
     try:
         model_max_seq_len_frames = int(os.getenv("MODEL_MAX_SEQ_LEN_FRAMES", 96))
+        default_generation_length_frames = int(
+            os.getenv("GENERATION_LENGTH_FRAMES", 20)
+        )
         model_size = os.getenv("MODEL_SIZE", "0.12B")
     except ValueError:
         print(
@@ -101,10 +160,12 @@ async def lifespan(app: FastAPI):
     try:
         print(f"Loading model from {checkpoint_path}...")
         print(f"Using Model Max Sequence Length (Frames): {model_max_seq_len_frames}")
+        print(f"Using default Generation Length (Frames): {default_generation_length_frames}")
         inference_engine = InferenceEngineStanley(
             checkpoint_path=checkpoint_path,
             model_size=model_size,
             model_max_seq_len_frames=model_max_seq_len_frames,
+            generation_length_frames=default_generation_length_frames,
         )
         print("Inference engine loaded successfully.")
 
@@ -257,6 +318,9 @@ async def generate_accompaniment(request: InferenceRequest):
         )
 
     melody_notes_dicts = [note.dict() for note in request.melody_notes]
+    effective_generation_length_frames = (
+        request.generation_length_frames or inference_engine.generation_length_frames
+    )
 
     (
         accompaniment_dicts,
@@ -267,11 +331,20 @@ async def generate_accompaniment(request: InferenceRequest):
     ) = inference_engine.generate_accompaniment(
         melody_notes_dicts,
         generation_start_tick=request.generation_start_tick,
-        generation_length_frames=request.generation_length_frames,  # may be None
+        generation_length_frames=effective_generation_length_frames,
+        prompt_length_ticks=request.prompt_length_ticks,
     )
-    print(f"Using generation length (frames): {request.generation_length_frames}")
 
     response_output_time = time.perf_counter()
+    inference_duration_ms = (inference_end_time - inference_start_time) * 1000
+    timing_analysis = calculate_musical_timing_analysis(
+        inference_duration_ms,
+        effective_generation_length_frames,
+        inference_interval_ticks=request.inference_interval_ticks,
+        tempo=request.tempo,
+        assumed_network_latency_ms=request.assumed_network_latency_ms,
+    )
+    print(timing_analysis)
 
     return AccompanimentResponse(
         accompaniment=accompaniment_dicts,
