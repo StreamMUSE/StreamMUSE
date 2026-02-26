@@ -34,3 +34,7 @@ prep_samples/
 inference_benchmark/temp/
 inference_benchmark/inputs/
 inference_benchmark/outputs/
+experiments/local_gl_test/
+experiments/local_server_gl_test/
+experiments/remote_gl_test_new/
+bench_results/
